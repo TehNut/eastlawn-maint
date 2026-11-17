@@ -1,0 +1,1 @@
+ALTER TABLE `user` ADD `location_id` text REFERENCES location(id);

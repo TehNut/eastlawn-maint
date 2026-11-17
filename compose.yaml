@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    env_file: .env
+    # Uncomment behind a reverse proxy so sign-in rate limits see the real client IP.
+    # environment:
+    #   ADDRESS_HEADER: X-Forwarded-For
+    #   XFF_DEPTH: '1'
+    volumes:
+      - data:/data
+
+volumes:
+  data:
