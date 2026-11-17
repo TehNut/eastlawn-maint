@@ -1,0 +1,242 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn-svelte/tailwind.css';
+@import '@fontsource-variable/geist';
+
+@custom-variant dark (&:is(.dark *));
+@plugin '@tailwindcss/typography';
+
+/* Light: warm paper and green-black ink. Dark: layered forest charcoal, not flat black.
+   One forest-green accent across both; neutrals carry a faint tint so nothing reads as default grey. */
+:root {
+	--background: oklch(0.982 0.005 95);
+	--foreground: oklch(0.22 0.02 160);
+	--card: oklch(0.997 0.002 95);
+	--card-foreground: oklch(0.22 0.02 160);
+	--popover: oklch(0.997 0.002 95);
+	--popover-foreground: oklch(0.22 0.02 160);
+	--primary: oklch(0.45 0.1 152);
+	--primary-foreground: oklch(0.985 0.008 152);
+	--secondary: oklch(0.945 0.014 152);
+	--secondary-foreground: oklch(0.34 0.07 152);
+	--muted: oklch(0.955 0.007 95);
+	--muted-foreground: oklch(0.5 0.018 160);
+	--accent: oklch(0.945 0.014 152);
+	--accent-foreground: oklch(0.34 0.07 152);
+	--destructive: oklch(0.55 0.2 27);
+	/* Warm, for what needs attention soon. Dark enough to read as text on its own 15% tint. */
+	--warn: oklch(0.52 0.13 62);
+	--border: oklch(0.905 0.009 95);
+	--input: oklch(0.88 0.01 95);
+	--ring: oklch(0.6 0.11 152);
+	--chart-1: oklch(0.82 0.08 152);
+	--chart-2: oklch(0.68 0.11 152);
+	--chart-3: oklch(0.56 0.11 152);
+	--chart-4: oklch(0.45 0.1 152);
+	--chart-5: oklch(0.36 0.08 152);
+	--radius: 0.5rem;
+	--sidebar: oklch(0.965 0.007 95);
+	--sidebar-foreground: oklch(0.22 0.02 160);
+	--sidebar-primary: oklch(0.45 0.1 152);
+	--sidebar-primary-foreground: oklch(0.985 0.008 152);
+	--sidebar-accent: oklch(0.925 0.02 152);
+	--sidebar-accent-foreground: oklch(0.34 0.07 152);
+	--sidebar-border: oklch(0.905 0.009 95);
+	--sidebar-ring: oklch(0.6 0.11 152);
+}
+
+.dark {
+	--background: oklch(0.19 0.015 160);
+	--foreground: oklch(0.94 0.008 95);
+	--card: oklch(0.225 0.017 160);
+	--card-foreground: oklch(0.94 0.008 95);
+	--popover: oklch(0.245 0.018 160);
+	--popover-foreground: oklch(0.94 0.008 95);
+	--primary: oklch(0.72 0.12 152);
+	--primary-foreground: oklch(0.2 0.04 152);
+	--secondary: oklch(0.28 0.035 152);
+	--secondary-foreground: oklch(0.9 0.035 152);
+	--muted: oklch(0.265 0.017 160);
+	--muted-foreground: oklch(0.7 0.02 160);
+	--accent: oklch(0.28 0.035 152);
+	--accent-foreground: oklch(0.9 0.035 152);
+	--destructive: oklch(0.7 0.17 25);
+	--warn: oklch(0.82 0.14 78);
+	--border: oklch(0.3 0.017 160);
+	--input: oklch(0.34 0.02 160);
+	--ring: oklch(0.72 0.12 152);
+	--chart-1: oklch(0.86 0.07 152);
+	--chart-2: oklch(0.76 0.1 152);
+	--chart-3: oklch(0.66 0.11 152);
+	--chart-4: oklch(0.56 0.1 152);
+	--chart-5: oklch(0.46 0.08 152);
+	--sidebar: oklch(0.165 0.015 160);
+	--sidebar-foreground: oklch(0.94 0.008 95);
+	--sidebar-primary: oklch(0.72 0.12 152);
+	--sidebar-primary-foreground: oklch(0.2 0.04 152);
+	--sidebar-accent: oklch(0.28 0.035 152);
+	--sidebar-accent-foreground: oklch(0.9 0.035 152);
+	--sidebar-border: oklch(0.27 0.017 160);
+	--sidebar-ring: oklch(0.72 0.12 152);
+}
+
+@theme inline {
+	--font-sans: 'Geist Variable', sans-serif;
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar: var(--sidebar);
+	--color-chart-5: var(--chart-5);
+	--color-chart-4: var(--chart-4);
+	--color-chart-3: var(--chart-3);
+	--color-chart-2: var(--chart-2);
+	--color-chart-1: var(--chart-1);
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-warn: var(--warn);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-3xl: calc(var(--radius) * 2.2);
+	--radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		@apply bg-background text-foreground;
+	}
+	html {
+		@apply font-sans;
+	}
+}
+
+/* Expanding panels animate to and from their natural height. Browsers without
+   interpolate-size or ::details-content just snap, as before. */
+:root {
+	interpolate-size: allow-keywords;
+}
+/* At most four lines, sized the same before and after JS runs so nothing animates on load.
+   calc-size keeps it animatable to height: auto; elsewhere max-height clamps without animation. */
+@utility clamp-4 {
+	max-height: 4lh;
+	@supports (height: calc-size(auto, size)) {
+		max-height: none;
+		height: calc-size(auto, min(size, 4lh));
+	}
+}
+@media (prefers-reduced-motion: no-preference) {
+	details::details-content {
+		height: 0;
+		overflow: clip;
+		transition:
+			height 200ms ease-out,
+			content-visibility 200ms ease-out allow-discrete;
+	}
+	details[open]::details-content {
+		height: auto;
+	}
+}
+
+/* A modal <dialog> makes the page inert but still lets it scroll; stop that. */
+html:has(dialog:modal) {
+	overflow: hidden;
+}
+
+/* Native-app feel */
+html {
+	-webkit-tap-highlight-color: transparent;
+	-webkit-text-size-adjust: 100%;
+	overscroll-behavior-y: none;
+}
+a,
+button,
+label {
+	touch-action: manipulation;
+}
+nav,
+button {
+	-webkit-user-select: none;
+	user-select: none;
+}
+/* iOS zooms the page when focusing inputs below 16px. */
+@media (max-width: 767px) {
+	input,
+	textarea,
+	select {
+		font-size: 16px !important;
+	}
+}
+@media print {
+	.no-print {
+		display: none !important;
+	}
+}
+
+/* Page transitions: push forward, pop back. */
+@keyframes slide-out {
+	to {
+		transform: translateX(var(--nav-dir, -24%));
+		opacity: 0;
+	}
+}
+@keyframes slide-in {
+	from {
+		transform: translateX(calc(var(--nav-dir, -24%) * -1));
+		opacity: 0;
+	}
+}
+html[data-nav='back'] {
+	--nav-dir: 24%;
+}
+::view-transition-old(root) {
+	animation: slide-out 180ms ease-in both;
+}
+::view-transition-new(root) {
+	animation: slide-in 220ms ease-out both;
+}
+html[data-nav='tab']::view-transition-old(root),
+html[data-nav='tab']::view-transition-new(root) {
+	animation: none;
+}
+/* The bar slides with its group, matching its CSS transition when a page loads instantly. */
+::view-transition-group(tab-bar) {
+	animation-duration: 150ms;
+	animation-timing-function: ease-in;
+}
+html[data-nav='tab']::view-transition-group(tab-bar),
+::view-transition-old(tab-bar),
+::view-transition-new(tab-bar) {
+	animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	::view-transition-group(tab-bar),
+	::view-transition-old(root),
+	::view-transition-new(root) {
+		animation: none;
+	}
+}

@@ -1,0 +1,15 @@
+{
+	"extends": "./.svelte-kit/tsconfig.json",
+	"compilerOptions": {
+		"strict": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"moduleResolution": "bundler",
+		// Tests run on Node's type stripping, which needs the .ts extension.
+		"allowImportingTsExtensions": true,
+		"types": ["node"]
+	}
+}
