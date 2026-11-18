@@ -18,9 +18,13 @@
 	};
 </script>
 
-<Skeleton {data} {id} {sample} label="Loading">
-	{#snippet children(value: T)}{@render content(value)}{/snippet}
-	{#snippet errorMessage(e)}
-		<p class="p-8 text-center text-muted-foreground">{message(e)}</p>
-	{/snippet}
-</Skeleton>
+<!-- shortcut: skullet 0.0.3 can't fade a pane back in if a fast reload brings it back mid fade-out
+     (fadeIn is cached per node), leaving results at opacity 0. Remount per promise; drop when fixed upstream. -->
+{#key data}
+	<Skeleton {data} {id} {sample} label="Loading">
+		{#snippet children(value: T)}{@render content(value)}{/snippet}
+		{#snippet errorMessage(e)}
+			<p class="p-8 text-center text-muted-foreground">{message(e)}</p>
+		{/snippet}
+	</Skeleton>
+{/key}
