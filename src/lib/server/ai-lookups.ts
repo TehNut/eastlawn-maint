@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { statusLabel, statusValues } from '$lib/constants';
 import { equipmentDetails, logLines } from './ai';
 import { inUserLocation } from './access';
-import type { Lookup } from './ai-chat';
+import { excerpt, type Lookup } from './ai-chat';
 import { equipment, location, maintenanceLog } from './db/schema';
 import { contains, equipmentMatches } from './equipment';
 import { searchManual } from './manuals';
@@ -151,20 +151,20 @@ export function generalLookups(locals: App.Locals): Record<string, Lookup> {
 				const found = await item(parsed.data.id);
 				if (!found) return { text: NOT_FOUND };
 				if (!found.manual?.chunkCount) return { text: 'This item has no searchable manual.' };
-				const hits = await searchManual(locals.db, found.manual.id, parsed.data.query);
+				const manualId = found.manual.id;
+				const hits = await searchManual(locals.db, manualId, parsed.data.query);
 				return {
 					text: hits.length
 						? hits.map((hit) => `[page ${hit.page}] ${hit.text}`).join('\n\n')
 						: 'No matching passages.',
 					source: { id: found.id, name: found.name },
-					manualPages: hits.length
-						? {
-								manualId: found.manual.id,
-								equipmentId: found.id,
-								name: found.name,
-								pages: hits.map((hit) => hit.page)
-							}
-						: undefined
+					citations: hits.map((hit) => ({
+						manualId,
+						equipmentId: found.id,
+						name: found.name,
+						page: hit.page,
+						excerpt: excerpt(hit.text)
+					}))
 				};
 			}
 		}

@@ -3,23 +3,21 @@ import { error } from '@sveltejs/kit';
 import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { inUserLocation, requirePermission } from '$lib/server/access';
-import { chatStream } from '$lib/server/ai-chat';
+import { chatStream, excerpt } from '$lib/server/ai-chat';
 import { aiTools, chatCompletion, systemPrompt } from '$lib/server/ai';
 import { equipment, maintenanceLog } from '$lib/server/db/schema';
-import { ChatMessages } from '$lib/server/forms';
+import { addQuestion, saveReply } from '$lib/server/chats';
+import { ChatQuestion } from '$lib/server/forms';
 import { searchManual } from '$lib/server/manuals';
 import { currentModel } from '$lib/server/settings';
 
-const Body = z.object({
-	equipmentId: z.string(),
-	messages: ChatMessages
-});
+const Body = ChatQuestion.extend({ equipmentId: z.string() });
 
 export const POST = async ({ request, locals }) => {
 	requirePermission(locals, 'ai.use');
 	const parsed = Body.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) error(400, 'Invalid request');
-	const { equipmentId, messages } = parsed.data;
+	const { equipmentId, chatId, content } = parsed.data;
 
 	const model = await currentModel(locals.db, env);
 	if (!model || !env.CF_ACCOUNT_ID || !env.CF_AI_TOKEN) error(503, 'AI is not configured');
@@ -35,7 +33,10 @@ export const POST = async ({ request, locals }) => {
 	if (!item) error(404, 'Not found');
 
 	const manual = item.manual?.chunkCount ? item.manual : null;
+	const { id, history } = await addQuestion(locals, item.id, chatId, content);
 	const stream = chatStream({
+		first: { chat: id },
+		onFinish: (reply, proposed) => saveReply(locals, id, reply, proposed),
 		complete: (history, tools) => chatCompletion(env, model, history, tools),
 		lookups: manual
 			? {
@@ -47,13 +48,19 @@ export const POST = async ({ request, locals }) => {
 								text: hits.length
 									? hits.map((hit) => `[page ${hit.page}] ${hit.text}`).join('\n\n')
 									: 'No matching passages.',
-								pages: hits.map((hit) => hit.page)
+								citations: hits.map((hit) => ({
+									manualId: manual.id,
+									equipmentId: item.id,
+									name: item.name,
+									page: hit.page,
+									excerpt: excerpt(hit.text)
+								}))
 							};
 						}
 					}
 				}
 			: {},
-		messages: [{ role: 'system', content: systemPrompt(item) }, ...messages],
+		messages: [{ role: 'system', content: systemPrompt(item) }, ...history],
 		tools: aiTools(locals.user, !!manual)
 	});
 	return new Response(stream, {

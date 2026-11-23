@@ -18,6 +18,7 @@ import type {
 	Part,
 	Status
 } from '$lib/constants';
+import type { Citation, Part as ChatPart, Source } from '$lib/chat';
 import type { Permission } from '$lib/permissions';
 
 export const newId = () => crypto.randomUUID().replaceAll('-', '').slice(0, 16);
@@ -335,6 +336,43 @@ export const productStandard = sqliteTable('product_standard', {
 	notes: text('notes'),
 	sortOrder: integer('sort_order').notNull().default(0)
 });
+
+// Assistant conversations, private to the user who had them. A chat started from an item's Ask
+// page belongs to that item; the general assistant's have none.
+export const chat = sqliteTable(
+	'chat',
+	{
+		id: id(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		equipmentId: text('equipment_id').references(() => equipment.id, { onDelete: 'cascade' }),
+		// The first question, shortened.
+		title: text('title').notNull(),
+		createdAt: timestamp('created_at'),
+		updatedAt: timestamp('updated_at')
+	},
+	(t) => [index('chat_user_idx').on(t.userId, t.equipmentId, t.updatedAt)]
+);
+
+export const chatMessage = sqliteTable(
+	'chat_message',
+	{
+		// Increasing, so it orders the conversation: a question and its reply can share a second.
+		id: integer('id').primaryKey({ autoIncrement: true }),
+		chatId: text('chat_id')
+			.notNull()
+			.references(() => chat.id, { onDelete: 'cascade' }),
+		role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+		content: text('content').notNull(),
+		// The reply's steps and citations, kept so a reopened chat shows what it showed.
+		parts: text('parts', { mode: 'json' }).$type<ChatPart[]>(),
+		citations: text('citations', { mode: 'json' }).$type<Citation[]>(),
+		sources: text('sources', { mode: 'json' }).$type<Source[]>(),
+		createdAt: timestamp('created_at')
+	},
+	(t) => [index('chat_message_chat_idx').on(t.chatId, t.id)]
+);
 
 export const locationRelations = relations(location, ({ many }) => ({
 	equipment: many(equipment)

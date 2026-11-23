@@ -1,78 +1,80 @@
 <script lang="ts">
-	import SendHorizontal from '@lucide/svelte/icons/send-horizontal';
-	import { onMount, tick } from 'svelte';
-	import { invalidateAll } from '$app/navigation';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import LoaderCircle from '@lucide/svelte/icons/loader-circle';
+	import MessageCircleDashed from '@lucide/svelte/icons/message-circle-dashed';
+	import Search from '@lucide/svelte/icons/search';
+	import { untrack } from 'svelte';
+	import { goto, invalidateAll } from '$app/navigation';
+	import { page } from '$app/state';
+	import {
+		applyEvent,
+		finishReply,
+		PROPOSAL_TEXT,
+		type Citation,
+		type ChatMessage,
+		type Part,
+		type Reply
+	} from '$lib/chat';
+	import ChatMarkdown from './ChatMarkdown.svelte';
+	import * as Bubble from '$lib/components/ui/bubble';
 	import { Button } from '$lib/components/ui/button';
-	import { Textarea } from '$lib/components/ui/textarea';
+	import * as Empty from '$lib/components/ui/empty';
+	import * as InputGroup from '$lib/components/ui/input-group';
+	import * as Message from '$lib/components/ui/message';
+	import * as MessageScroller from '$lib/components/ui/message-scroller';
+	import * as Trace from '$lib/components/ui/trace';
 
 	let {
 		endpoint,
 		payload = {},
 		starters,
 		intro,
-		storageKey,
-		pageHref,
+		chat,
 		applyTo
 	}: {
 		endpoint: string;
 		payload?: Record<string, unknown>;
 		starters: string[];
 		intro: string;
-		// Keeps the conversation when the panel unmounts, for a chat that lives in a tab.
-		storageKey?: string;
-		pageHref?: (page: number) => string;
+		// The saved chat this page opened, if any.
+		chat: { id: string; messages: ChatMessage[] } | null;
 		// The equipment approved changes apply to. Without it there's nothing to approve.
 		applyTo?: string;
 	} = $props();
 
-	type Message = {
-		role: 'user' | 'assistant';
-		content: string;
-		pages?: number[];
-		sources?: { id: string; name: string }[];
-		manualPages?: { manualId: string; equipmentId: string; name: string; pages: number[] }[];
-	};
 	type Proposal = { tool: string; args: Record<string, unknown>; state: 'open' | 'busy' | 'done' };
 
-	// /api/ask and /api/chat accept 40, and the oldest has to stay a user message.
-	const MAX_HISTORY = 39;
-
-	let messages = $state<Message[]>([]);
+	let chatId = $state<string | null>(null);
+	let messages = $state<ChatMessage[]>([]);
 	let proposals = $state<Proposal[]>([]);
 	let input = $state('');
 	let busy = $state(false);
-	let searching = $state('');
 	let error = $state('');
-	let end = $state<HTMLElement>();
-	let restored = $state(false);
+	// The reader's choice per reasoning row; until they click it follows whether it's still thinking.
+	let reasoningOpen = $state<Record<string, boolean>>({});
 
-	const scrollDown = () => tick().then(() => end?.scrollIntoView({ block: 'end' }));
-
-	onMount(() => {
-		try {
-			const saved = storageKey && sessionStorage.getItem(storageKey);
-			if (saved) messages = (JSON.parse(saved) as Message[]).filter((m) => m.content);
-		} catch {
-			// Unavailable or corrupt storage just means starting a new chat.
-		}
-		restored = true;
-		scrollDown();
+	// Opening another chat, or a new one, replaces the conversation. The URL catching up with a chat
+	// this panel just started doesn't.
+	$effect.pre(() => {
+		const id = chat?.id ?? null;
+		untrack(() => {
+			if (id === chatId) return;
+			chatId = id;
+			messages = chat?.messages ?? [];
+			proposals = [];
+			reasoningOpen = {};
+			error = '';
+		});
 	});
 
-	$effect(() => {
-		const saved = JSON.stringify(messages);
-		if (!storageKey || !restored) return;
-		try {
-			sessionStorage.setItem(storageKey, saved);
-		} catch {
-			// The chat still works, it just won't survive leaving the tab.
-		}
-	});
-
-	export function clear() {
-		messages = [];
-		proposals = [];
-		error = '';
+	// The server started a chat for the first question: put it in the URL, so it survives a reload
+	// and shows in the history.
+	function started(id: string) {
+		if (chatId === id) return;
+		chatId = id;
+		goto(`${page.url.pathname}?c=${id}`, { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
 	async function send(content: string) {
@@ -82,17 +84,15 @@
 		error = '';
 		busy = true;
 		messages.push({ role: 'user', content });
-		const history = messages.slice(-MAX_HISTORY).map(({ role, content }) => ({ role, content }));
-		messages.push({ role: 'assistant', content: '' });
+		messages.push({ role: 'assistant', content: '', parts: [] });
 		proposals = [];
-		const reply = messages[messages.length - 1];
-		scrollDown();
+		const reply = messages[messages.length - 1] as Reply;
 
 		try {
 			const response = await fetch(endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ ...payload, messages: history })
+				body: JSON.stringify({ ...payload, chatId, content })
 			});
 			if (!response.ok || !response.body) {
 				const body = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -104,15 +104,14 @@
 				args: JSON.parse(args || '{}'),
 				state: 'open'
 			}));
-			if (proposals.length && !reply.content) reply.content = 'Here is the change I suggest:';
+			if (proposals.length && !reply.content) reply.content = PROPOSAL_TEXT;
 			if (!reply.content) throw new Error('No response from the model');
-			scrollDown();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Request failed';
 			if (!reply.content) messages.pop();
 		} finally {
 			busy = false;
-			searching = '';
+			finishReply(reply);
 		}
 	}
 
@@ -139,8 +138,25 @@
 		add_maintenance_log: 'Add maintenance log'
 	};
 
+	// Every page the model read, grouped by manual, for the list under a reply.
+	function byManual(citations: Citation[] = []) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive state
+		const groups = new Map<string, Citation & { pages: number[] }>();
+		for (const c of citations) {
+			const group =
+				groups.get(c.manualId) ?? groups.set(c.manualId, { ...c, pages: [] }).get(c.manualId)!;
+			group.pages.push(c.page);
+		}
+		for (const group of groups.values()) group.pages.sort((a, b) => a - b);
+		return [...groups.values()];
+	}
+
+	// The lookup's main argument, such as the search terms, to show beside its label.
+	const toolDetail = (args: Record<string, unknown>) =>
+		Object.values(args).find((v): v is string => typeof v === 'string');
+
 	// Events from the chat endpoints, one JSON value per `data:` line.
-	async function readStream(body: ReadableStream<Uint8Array>, reply: Message) {
+	async function readStream(body: ReadableStream<Uint8Array>, reply: Reply) {
 		const calls: { name: string; args: string }[] = [];
 		const reader = body.getReader();
 		const decoder = new TextDecoder();
@@ -156,131 +172,209 @@
 				const event = JSON.parse(line.slice(5));
 				if (event === 'done') return calls;
 				if (event.error) throw new Error(event.error);
-				if (event.searching) searching = event.searching;
-				if (event.pages) reply.pages = event.pages;
-				if (event.sources) reply.sources = event.sources;
-				if (event.manualPages) reply.manualPages = event.manualPages;
+				if (event.chat) started(event.chat);
 				if (event.toolCall) calls.push(event.toolCall);
-				if (event.text) {
-					searching = '';
-					reply.content += event.text;
-				}
-				scrollDown();
+				applyEvent(reply, event);
 			}
 		}
 	}
 </script>
 
-<main class="mx-auto min-h-0 w-full max-w-3xl flex-1 space-y-3 overflow-y-auto p-4">
-	{#if messages.length === 0}
-		<p class="text-sm text-muted-foreground">{intro}</p>
-		<div class="space-y-2">
-			{#each starters as starter (starter)}
-				<button
-					type="button"
-					class="block w-full rounded-xl border p-3 text-left text-sm active:bg-muted"
-					onclick={() => send(starter)}
-				>
-					{starter}
-				</button>
-			{/each}
-		</div>
-	{/if}
-	{#each messages as message, i (i)}
-		<div
-			class="max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap {message.role === 'user'
-				? 'ml-auto bg-primary text-primary-foreground'
-				: 'bg-muted'}"
+{#snippet reasoningRow(id: string, text: string, running: boolean)}
+	<Trace.Collapsible
+		open={reasoningOpen[id] ?? running}
+		onOpenChange={(open) => (reasoningOpen[id] = open)}
+	>
+		<Trace.CollapsibleTrigger>
+			<Trace.Line status={running ? 'running' : undefined}>
+				<Trace.Icon>
+					{#if running}<LoaderCircle class="animate-spin" />{:else}<CircleCheck />{/if}
+				</Trace.Icon>
+				<Trace.Title>{running ? 'Thinking' : 'Thought'}</Trace.Title>
+			</Trace.Line>
+		</Trace.CollapsibleTrigger>
+		<Trace.CollapsibleContent class="whitespace-pre-wrap">{text}</Trace.CollapsibleContent>
+	</Trace.Collapsible>
+{/snippet}
+
+{#snippet toolRow(part: Extract<Part, { type: 'tool' }>)}
+	{@const detail = toolDetail(part.args)}
+	{#snippet line()}
+		<Trace.Line
+			status={part.state === 'running' ? 'running' : part.state === 'error' ? 'error' : undefined}
 		>
-			{message.content || searching || '…'}
-		</div>
-		{#if message.pages?.length && pageHref}
-			<div class="flex flex-wrap items-center gap-1.5 text-xs">
-				<span class="text-muted-foreground">Manual:</span>
-				{#each message.pages as page (page)}
-					<a href={pageHref(page)} class="rounded-full border px-2.5 py-1.5 active:bg-muted">
-						p. {page}
-					</a>
-				{/each}
-			</div>
-		{/if}
-		{#each message.manualPages ?? [] as cited (cited.equipmentId)}
-			<div class="flex flex-wrap items-center gap-1.5 text-xs">
-				<span class="text-muted-foreground">{cited.name} manual:</span>
-				{#each cited.pages as page (page)}
-					<a
-						href="/manuals/{cited.manualId}?page={page}&from={cited.equipmentId}"
-						class="rounded-full border px-2.5 py-1.5 active:bg-muted"
-					>
-						p. {page}
-					</a>
-				{/each}
-			</div>
-		{/each}
-		{#if message.sources?.length}
-			<div class="flex flex-wrap items-center gap-1.5 text-xs">
-				{#each message.sources as source (source.id)}
-					<a
-						href="/equipment/{source.id}"
-						class="rounded-full border px-2.5 py-1.5 active:bg-muted"
-					>
-						{source.name}
-					</a>
-				{/each}
-			</div>
-		{/if}
-	{/each}
-	{#each proposals as proposal (proposal)}
-		<div class="space-y-2 rounded-xl border p-3 text-sm">
-			<p class="font-medium">{TITLES[proposal.tool] ?? proposal.tool}</p>
-			<dl class="space-y-1">
-				{#each Object.entries(proposal.args) as [field, value] (field)}
-					<div>
-						<dt class="text-xs text-muted-foreground">{field}</dt>
-						<dd class="whitespace-pre-wrap">{String(value)}</dd>
-					</div>
-				{/each}
-			</dl>
-			{#if proposal.state === 'done'}
-				<p role="status" class="text-muted-foreground">Applied.</p>
-			{:else}
-				<div class="flex gap-2">
-					<Button
-						class="h-11 flex-1"
-						disabled={proposal.state === 'busy'}
-						onclick={() => apply(proposal)}
-					>
-						Apply
-					</Button>
+			<Trace.Icon>
+				{#if part.state === 'running'}
+					<LoaderCircle class="animate-spin" />
+				{:else if part.state === 'error'}
+					<CircleAlert />
+				{:else}
+					<Search />
+				{/if}
+			</Trace.Icon>
+			<Trace.Title>{part.label.replace(/…$/, '')}</Trace.Title>
+			{#if detail}<Trace.Description class="truncate">{detail}</Trace.Description>{/if}
+		</Trace.Line>
+	{/snippet}
+	{#if part.output}
+		<Trace.Collapsible>
+			<Trace.CollapsibleTrigger>{@render line()}</Trace.CollapsibleTrigger>
+			<Trace.CollapsibleContent class="max-h-64 overflow-y-auto text-xs whitespace-pre-wrap">
+				{part.output}
+			</Trace.CollapsibleContent>
+		</Trace.Collapsible>
+	{:else}
+		{@render line()}
+	{/if}
+{/snippet}
+
+<MessageScroller.Provider autoScroll>
+	{#if messages.length === 0}
+		<Empty.Root class="min-h-0 flex-1 overflow-y-auto">
+			<Empty.Header>
+				<Empty.Media variant="icon"><MessageCircleDashed /></Empty.Media>
+				<Empty.Title>How can I help?</Empty.Title>
+				<Empty.Description>{intro}</Empty.Description>
+			</Empty.Header>
+			<Empty.Content>
+				{#each starters as starter (starter)}
 					<Button
 						variant="outline"
-						class="h-11 flex-1"
-						onclick={() => (proposals = proposals.filter((p) => p !== proposal))}
+						class="h-auto min-h-11 w-full justify-start text-left whitespace-normal"
+						onclick={() => send(starter)}
 					>
-						Dismiss
+						{starter}
 					</Button>
-				</div>
-			{/if}
-		</div>
-	{/each}
-	{#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
-	<div bind:this={end}></div>
-</main>
+				{/each}
+			</Empty.Content>
+		</Empty.Root>
+	{:else}
+		<MessageScroller.Root class="min-h-0 flex-1">
+			<MessageScroller.Viewport>
+				<MessageScroller.Content aria-busy={busy} class="mx-auto w-full max-w-3xl gap-6 p-4">
+					{#each messages as message, i (i)}
+						{@const streaming = busy && i === messages.length - 1}
+						<MessageScroller.Item messageId={String(i)} scrollAnchor={message.role === 'user'}>
+							{#if message.role === 'user'}
+								<Message.Root align="end">
+									<Message.Content>
+										<Bubble.Root align="end" variant="muted">
+											<Bubble.Content class="whitespace-pre-wrap">{message.content}</Bubble.Content>
+										</Bubble.Root>
+									</Message.Content>
+								</Message.Root>
+							{:else}
+								<Message.Root>
+									<Message.Content class="gap-3">
+										{#if message.parts?.length}
+											<Trace.Root>
+												{#each message.parts as part, p (p)}
+													{#if part.type === 'reasoning'}
+														{@render reasoningRow(
+															`${i}-${p}`,
+															part.text,
+															streaming && !message.content && p === message.parts.length - 1
+														)}
+													{:else}
+														{@render toolRow(part)}
+													{/if}
+												{/each}
+											</Trace.Root>
+										{:else if streaming && !message.content}
+											<Trace.Root>
+												<Trace.Line status="running">
+													<Trace.Icon><LoaderCircle class="animate-spin" /></Trace.Icon>
+													<Trace.Title>Working</Trace.Title>
+												</Trace.Line>
+											</Trace.Root>
+										{/if}
+										{#if message.content}
+											<ChatMarkdown md={message.content} citations={message.citations} />
+										{/if}
+									</Message.Content>
+								</Message.Root>
+							{/if}
+							{#each byManual(message.citations) as cited (cited.manualId)}
+								<div class="flex flex-wrap items-center gap-1.5 text-xs">
+									<span class="text-muted-foreground">{cited.name} manual:</span>
+									{#each cited.pages as page (page)}
+										<a
+											href="/manuals/{cited.manualId}?page={page}&from={cited.equipmentId}"
+											class="rounded-full border px-2.5 py-1.5 active:bg-muted"
+										>
+											p. {page}
+										</a>
+									{/each}
+								</div>
+							{/each}
+							{#if message.sources?.length}
+								<div class="flex flex-wrap items-center gap-1.5 text-xs">
+									{#each message.sources as source (source.id)}
+										<a
+											href="/equipment/{source.id}"
+											class="rounded-full border px-2.5 py-1.5 active:bg-muted"
+										>
+											{source.name}
+										</a>
+									{/each}
+								</div>
+							{/if}
+						</MessageScroller.Item>
+					{/each}
+					{#each proposals as proposal (proposal)}
+						<div class="space-y-2 rounded-xl border p-3 text-sm">
+							<p class="font-medium">{TITLES[proposal.tool] ?? proposal.tool}</p>
+							<dl class="space-y-1">
+								{#each Object.entries(proposal.args) as [field, value] (field)}
+									<div>
+										<dt class="text-xs text-muted-foreground">{field}</dt>
+										<dd class="whitespace-pre-wrap">{String(value)}</dd>
+									</div>
+								{/each}
+							</dl>
+							{#if proposal.state === 'done'}
+								<p role="status" class="text-muted-foreground">Applied.</p>
+							{:else}
+								<div class="flex gap-2">
+									<Button
+										class="h-11 flex-1"
+										disabled={proposal.state === 'busy'}
+										onclick={() => apply(proposal)}
+									>
+										Apply
+									</Button>
+									<Button
+										variant="outline"
+										class="h-11 flex-1"
+										onclick={() => (proposals = proposals.filter((p) => p !== proposal))}
+									>
+										Dismiss
+									</Button>
+								</div>
+							{/if}
+						</div>
+					{/each}
+					{#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
+				</MessageScroller.Content>
+			</MessageScroller.Viewport>
+			<MessageScroller.Button />
+		</MessageScroller.Root>
+	{/if}
+</MessageScroller.Provider>
 
 <form
-	class="mx-auto w-full max-w-3xl border-t p-3"
+	class="mx-auto w-full max-w-3xl p-3"
 	onsubmit={(e) => {
 		e.preventDefault();
 		send(input);
 	}}
 >
-	<div class="flex items-end gap-2">
-		<Textarea
+	<InputGroup.Root>
+		<InputGroup.Textarea
 			bind:value={input}
-			rows={1}
 			placeholder="Ask a question"
 			aria-label="Question"
-			class="max-h-32 min-h-11"
+			class="max-h-40 min-h-14"
 			onkeydown={(e) => {
 				if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 					e.preventDefault();
@@ -288,14 +382,17 @@
 				}
 			}}
 		/>
-		<Button
-			type="submit"
-			size="icon"
-			class="size-11 shrink-0"
-			aria-label="Send"
-			disabled={busy || !input.trim()}
-		>
-			<SendHorizontal class="size-5" />
-		</Button>
-	</div>
+		<InputGroup.Addon align="block-end" class="pt-1">
+			<InputGroup.Button
+				type="submit"
+				variant="default"
+				size="icon-sm"
+				class="ml-auto size-9 rounded-full"
+				aria-label="Send"
+				disabled={busy || !input.trim()}
+			>
+				<ArrowUp />
+			</InputGroup.Button>
+		</InputGroup.Addon>
+	</InputGroup.Root>
 </form>

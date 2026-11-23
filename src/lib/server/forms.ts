@@ -151,10 +151,11 @@ const LogPresets = z
 	)
 	.max(MAX_LOG_PRESETS, `Keep it to ${MAX_LOG_PRESETS} presets`);
 
-export const ChatMessages = z
-	.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(8000) }))
-	.min(1)
-	.max(40);
+// A new question, and the chat it continues (none starts one). History comes from the database.
+export const ChatQuestion = z.object({
+	chatId: z.string().max(32).nullable().default(null),
+	content: z.string().trim().min(1).max(8000)
+});
 
 const NewUser = z.object({
 	name: required('Name'),
