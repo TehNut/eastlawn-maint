@@ -98,7 +98,8 @@ function argsOf(call: ToolCall): Record<string, unknown> {
 
 // Runs the conversation, handling lookups here and streaming events to the browser. Lookup results
 // only exist within this request: later turns see the reply's text, so they are never resent.
-// `first` is sent before anything else; `onFinish` gets the whole reply, even if the browser left.
+// `first` is sent before anything else. `onFinish` gets the whole reply, even if the browser left,
+// and may return one last event to send.
 export function chatStream({
 	complete,
 	lookups,
@@ -114,7 +115,7 @@ export function chatStream({
 	tools: Tool[];
 	maxRounds?: number;
 	first?: Record<string, unknown>;
-	onFinish?: (reply: Reply, proposed: boolean) => Promise<void>;
+	onFinish?: (reply: Reply, proposed: boolean) => Promise<Record<string, unknown> | void>;
 }) {
 	const encoder = new TextEncoder();
 	return new ReadableStream<Uint8Array>({
@@ -198,7 +199,8 @@ export function chatStream({
 			}
 			finishReply(reply);
 			try {
-				await onFinish?.(reply, proposed);
+				const last = await onFinish?.(reply, proposed);
+				if (last) send(last);
 			} catch (e) {
 				console.error('Saving the reply failed', e);
 				send({ error: 'The reply could not be saved' });

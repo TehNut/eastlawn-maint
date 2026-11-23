@@ -1,7 +1,9 @@
 import { error, redirect } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
+import { env } from '$env/dynamic/private';
 import { inUserLocation, requirePermission } from '$lib/server/access';
 import { deleteChat, loadChat, recentChats } from '$lib/server/chats';
+import { appToday } from '$lib/server/schedule';
 import { equipment } from '$lib/server/db/schema';
 
 const findItem = (locals: App.Locals, id: string) =>
@@ -16,7 +18,7 @@ export const load = async ({ locals, params, url }) => {
 	if (!item) error(404, 'Equipment not found');
 	const [chats, chat] = await Promise.all([
 		recentChats(locals, item.id),
-		loadChat(locals, item.id, url.searchParams.get('c'))
+		loadChat(locals, appToday(env), item.id, url.searchParams.get('c'))
 	]);
 	return { item, chats, chat };
 };

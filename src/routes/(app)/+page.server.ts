@@ -1,9 +1,9 @@
 import { env } from '$env/dynamic/private';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { statusValues, type Status } from '$lib/constants';
 import { inUserLocation } from '$lib/server/access';
-import { equipment, location, photo } from '$lib/server/db/schema';
-import { equipmentMatches, retiredLast } from '$lib/server/equipment';
+import { equipment, location } from '$lib/server/db/schema';
+import { coverId, equipmentMatches, retiredLast } from '$lib/server/equipment';
 import { paginate } from '$lib/server/pagination';
 import { appToday } from '$lib/server/schedule';
 import { itemFlag } from '$lib/schedule';
@@ -40,11 +40,7 @@ export const load = async ({ locals, url }) => {
 					soonOn: equipment.soonOn,
 					unloggedJobs: equipment.unloggedJobs,
 					jobCount: equipment.jobCount,
-					coverId: sql<string | null>`(
-				SELECT ${photo.id} FROM ${photo}
-				WHERE ${photo.equipmentId} = ${equipment.id} AND ${isNull(photo.logId)}
-				ORDER BY ${photo.createdAt} LIMIT 1
-			)`
+					coverId
 				})
 				.from(equipment)
 				.innerJoin(location, eq(equipment.locationId, location.id))

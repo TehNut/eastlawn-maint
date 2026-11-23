@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyEvent, emptyReply, finishReply } from './chat.ts';
+import { applyEvent, emptyReply, EQUIPMENT_HREF, finishReply, linkedEquipment } from './chat.ts';
 
 test('applyEvent builds the reply the browser shows and the server saves', () => {
 	const reply = emptyReply();
@@ -20,4 +20,13 @@ test('applyEvent builds the reply the browser shows and the server saves', () =>
 		reply.parts.map((p) => (p.type === 'tool' ? `${p.id}:${p.state}` : p.text)),
 		['Check the manual.', 't1:done', 't2:error', 'Found it.']
 	);
+});
+
+test('equipment links the model writes are found, and nothing else', () => {
+	const reply =
+		'Check [Kubota L3901](/equipment/a1b2c3d4e5f6a7b8) and [the mower](/equipment/fx-02). ' +
+		'See [docs](/manuals/m1) or [elsewhere](https://x.test/equipment/zz).';
+	assert.deepEqual(linkedEquipment(reply), ['a1b2c3d4e5f6a7b8', 'fx-02']);
+	assert.equal('/equipment/fx-02'.match(EQUIPMENT_HREF)?.[1], 'fx-02');
+	assert.equal('/equipment/fx-02/edit'.match(EQUIPMENT_HREF), null);
 });

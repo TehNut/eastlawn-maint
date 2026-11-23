@@ -35,7 +35,7 @@ export const POST = async ({ request, locals }) => {
 	const { id, history } = await addQuestion(locals, null, parsed.data.chatId, parsed.data.content);
 	const stream = chatStream({
 		first: { chat: id },
-		onFinish: (reply, proposed) => saveReply(locals, id, reply, proposed),
+		onFinish: (reply, proposed) => saveReply(locals, appToday(env), id, reply, proposed),
 		complete: (history, tools) => chatCompletion(env, model, history, tools),
 		lookups: generalLookups(locals),
 		messages: [

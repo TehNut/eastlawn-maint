@@ -1,7 +1,8 @@
 import { error } from '@sveltejs/kit';
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
-import { PROPOSAL_TEXT, type ChatMessage, type Reply } from '$lib/chat';
+import { linkedEquipment, PROPOSAL_TEXT, type ChatMessage, type Reply } from '$lib/chat';
 import { chat, chatMessage } from './db/schema';
+import { equipmentCards } from './equipment';
 
 // The model sees this many earlier messages. Older ones stay saved and shown, just not sent.
 const HISTORY = 38;
@@ -24,7 +25,12 @@ export const recentChats = (locals: App.Locals, equipmentId: string | null) =>
 		.limit(RECENT);
 
 // A chat and its messages for the page, or null when it isn't this user's (or was deleted).
-export async function loadChat(locals: App.Locals, equipmentId: string | null, id: string | null) {
+export async function loadChat(
+	locals: App.Locals,
+	today: string,
+	equipmentId: string | null,
+	id: string | null
+) {
 	if (!id) return null;
 	const [found] = await locals.db
 		.select({ id: chat.id })
@@ -43,7 +49,10 @@ export async function loadChat(locals: App.Locals, equipmentId: string | null, i
 		citations: m.citations ?? undefined,
 		sources: m.sources ?? undefined
 	}));
-	return { id, messages };
+	const linked = messages.flatMap((m) =>
+		m.role === 'assistant' ? linkedEquipment(m.content) : []
+	);
+	return { id, messages, equipment: await equipmentCards(locals, today, linked) };
 }
 
 // Continues a chat, or starts one, with a new question. Returns what the model should see, which
@@ -82,8 +91,10 @@ export async function addQuestion(
 	return { id: id!, history: [...earlier, { role: 'user' as const, content }] };
 }
 
+// Saves the reply, then returns the chips for the items it links to, as the stream's last event.
 export async function saveReply(
 	locals: App.Locals,
+	today: string,
 	chatId: string,
 	reply: Reply,
 	proposed: boolean
@@ -100,6 +111,8 @@ export async function saveReply(
 		sources: reply.sources ?? null
 	});
 	await touch(locals, chatId);
+	const linked = linkedEquipment(content);
+	if (linked.length) return { equipment: await equipmentCards(locals, today, linked) };
 }
 
 const touch = (locals: App.Locals, id: string) =>

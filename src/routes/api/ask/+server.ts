@@ -9,6 +9,7 @@ import { equipment, maintenanceLog } from '$lib/server/db/schema';
 import { addQuestion, saveReply } from '$lib/server/chats';
 import { ChatQuestion } from '$lib/server/forms';
 import { searchManual } from '$lib/server/manuals';
+import { appToday } from '$lib/server/schedule';
 import { currentModel } from '$lib/server/settings';
 
 const Body = ChatQuestion.extend({ equipmentId: z.string() });
@@ -36,7 +37,7 @@ export const POST = async ({ request, locals }) => {
 	const { id, history } = await addQuestion(locals, item.id, chatId, content);
 	const stream = chatStream({
 		first: { chat: id },
-		onFinish: (reply, proposed) => saveReply(locals, id, reply, proposed),
+		onFinish: (reply, proposed) => saveReply(locals, appToday(env), id, reply, proposed),
 		complete: (history, tools) => chatCompletion(env, model, history, tools),
 		lookups: manual
 			? {

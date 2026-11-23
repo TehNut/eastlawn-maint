@@ -14,6 +14,22 @@ export type Citation = {
 
 export type Source = { id: string; name: string };
 
+// An item the reply links to, shown as an inline chip. Looked up when shown, so it's current.
+export type EquipmentCard = {
+	id: string;
+	name: string;
+	status: string;
+	locationName: string;
+	coverId: string | null;
+	due: 'due' | 'due_soon' | null;
+};
+
+// The model links items as [Name](/equipment/<id>), which the chat turns into a chip. It stays an
+// ordinary link wherever the item can't be shown.
+export const EQUIPMENT_HREF = /^\/equipment\/([\w-]+)$/;
+export const linkedEquipment = (markdown: string) =>
+	[...markdown.matchAll(/\]\(\/equipment\/([\w-]+)\)/g)].map((m) => m[1]);
+
 // The steps taken before replying, in order.
 export type Part =
 	| { type: 'reasoning'; text: string }

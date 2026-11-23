@@ -14,6 +14,7 @@
 		PROPOSAL_TEXT,
 		type Citation,
 		type ChatMessage,
+		type EquipmentCard,
 		type Part,
 		type Reply
 	} from '$lib/chat';
@@ -39,7 +40,11 @@
 		starters: string[];
 		intro: string;
 		// The saved chat this page opened, if any.
-		chat: { id: string; messages: ChatMessage[] } | null;
+		chat: {
+			id: string;
+			messages: ChatMessage[];
+			equipment: Record<string, EquipmentCard>;
+		} | null;
 		// The equipment approved changes apply to. Without it there's nothing to approve.
 		applyTo?: string;
 	} = $props();
@@ -48,6 +53,8 @@
 
 	let chatId = $state<string | null>(null);
 	let messages = $state<ChatMessage[]>([]);
+	// Items replies link to, by id, shown as chips.
+	let equipment = $state<Record<string, EquipmentCard>>({});
 	let proposals = $state<Proposal[]>([]);
 	let input = $state('');
 	let busy = $state(false);
@@ -63,6 +70,7 @@
 			if (id === chatId) return;
 			chatId = id;
 			messages = chat?.messages ?? [];
+			equipment = chat?.equipment ?? {};
 			proposals = [];
 			reasoningOpen = {};
 			error = '';
@@ -174,6 +182,7 @@
 				if (event.error) throw new Error(event.error);
 				if (event.chat) started(event.chat);
 				if (event.toolCall) calls.push(event.toolCall);
+				if (event.equipment) Object.assign(equipment, event.equipment);
 				applyEvent(reply, event);
 			}
 		}
@@ -289,7 +298,11 @@
 											</Trace.Root>
 										{/if}
 										{#if message.content}
-											<ChatMarkdown md={message.content} citations={message.citations} />
+											<ChatMarkdown
+												md={message.content}
+												citations={message.citations}
+												{equipment}
+											/>
 										{/if}
 									</Message.Content>
 								</Message.Root>

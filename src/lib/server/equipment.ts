@@ -1,11 +1,49 @@
-import { and, asc, eq, isNull, ne, or, sql, type Column } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, ne, or, sql, type Column } from 'drizzle-orm';
 import QRCode from 'qrcode';
+import type { EquipmentCard } from '$lib/chat';
+import { itemFlag } from '$lib/schedule';
 import { inUserLocation } from './access';
-import { equipment } from './db/schema';
+import { equipment, location, photo } from './db/schema';
 
 export function contains(column: Column, text: string) {
 	const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
 	return sql`${column} LIKE ${pattern} ESCAPE '\\'`;
+}
+
+// An item's cover: its first photo that isn't part of a log.
+export const coverId = sql<string | null>`(
+	SELECT ${photo.id} FROM ${photo}
+	WHERE ${photo.equipmentId} = ${equipment.id} AND ${isNull(photo.logId)}
+	ORDER BY ${photo.createdAt} LIMIT 1
+)`;
+
+// Chips for items a chat reply links to, keyed by id. Ones this user can't see are left out.
+export async function equipmentCards(locals: App.Locals, today: string, ids: string[]) {
+	const cards: Record<string, EquipmentCard> = {};
+	if (!ids.length) return cards;
+	const rows = await locals.db
+		.select({
+			id: equipment.id,
+			name: equipment.name,
+			status: equipment.status,
+			locationName: location.name,
+			coverId,
+			dueOn: equipment.dueOn,
+			soonOn: equipment.soonOn,
+			unloggedJobs: equipment.unloggedJobs,
+			jobCount: equipment.jobCount
+		})
+		.from(equipment)
+		.innerJoin(location, eq(equipment.locationId, location.id))
+		.where(
+			and(inArray(equipment.id, [...new Set(ids)]), inUserLocation(locals, equipment.locationId))
+		);
+	for (const { dueOn, soonOn, unloggedJobs, jobCount, ...card } of rows) {
+		const flag =
+			card.status === 'retired' ? null : itemFlag({ dueOn, soonOn, unloggedJobs, jobCount }, today);
+		cards[card.id] = { ...card, due: flag === 'due' || flag === 'due_soon' ? flag : null };
+	}
+	return cards;
 }
 
 // Sort key for equipment lists: retired items go last.

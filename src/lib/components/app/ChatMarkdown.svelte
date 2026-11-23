@@ -45,9 +45,18 @@
 	import { gfmPlugin } from 'svelte-exmarkdown/gfm';
 	import { Button } from '$lib/components/ui/button';
 	import * as HoverCard from '$lib/components/ui/hover-card';
-	import type { Citation } from '$lib/chat';
+	import Wrench from '@lucide/svelte/icons/wrench';
+	import DueBadge from './DueBadge.svelte';
+	import EquipmentRow from './EquipmentRow.svelte';
+	import { EQUIPMENT_HREF, type Citation, type EquipmentCard } from '$lib/chat';
 
-	let { md, citations = [] }: { md: string; citations?: Citation[] } = $props();
+	let {
+		md,
+		citations = [],
+		equipment = {}
+	}: { md: string; citations?: Citation[]; equipment?: Record<string, EquipmentCard> } = $props();
+
+	const cardFor = (href: string) => equipment[href.match(EQUIPMENT_HREF)?.[1] ?? ''];
 
 	const plugins = [gfmPlugin(), citationPlugin];
 
@@ -69,7 +78,10 @@
 	<Markdown {md} {plugins}>
 		{#snippet a({ href, children })}
 			{@const url = safeHref(href)}
-			{#if url}
+			{@const card = url && cardFor(url)}
+			{#if card}
+				{@render equipmentChip(card)}
+			{:else if url}
 				<a
 					href={url}
 					{...url.startsWith('/') ? {} : { target: '_blank', rel: 'noopener noreferrer' }}
@@ -119,6 +131,36 @@
 			>
 				Open page {c.page}
 			</a>
+		</HoverCard.Content>
+	</HoverCard.Root>
+{/snippet}
+
+<!-- Shows the item's current name, not the model's wording, so a chip can't mislabel what it opens. -->
+{#snippet equipmentChip(card: EquipmentCard)}
+	<HoverCard.Root openDelay={10} closeDelay={100}>
+		<HoverCard.Trigger>
+			{#snippet child({ props })}
+				<a
+					{...props}
+					href="/equipment/{card.id}"
+					class="not-prose inline-flex max-w-full items-center gap-1.5 rounded-full border bg-background py-0.5 pr-2 pl-0.5 align-middle text-sm font-medium text-foreground no-underline active:bg-muted"
+				>
+					<span
+						class="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted"
+					>
+						{#if card.coverId}
+							<img src="/images/{card.coverId}" alt="" class="size-full object-cover" />
+						{:else}
+							<Wrench class="size-3 text-muted-foreground" />
+						{/if}
+					</span>
+					<span class="truncate">{card.name}</span>
+					{#if card.due}<DueBadge state={card.due} />{/if}
+				</a>
+			{/snippet}
+		</HoverCard.Trigger>
+		<HoverCard.Content class="w-72 p-0">
+			<EquipmentRow item={card} />
 		</HoverCard.Content>
 	</HoverCard.Root>
 {/snippet}
