@@ -3,13 +3,15 @@ import { error } from '@sveltejs/kit';
 import { asc, eq } from 'drizzle-orm';
 import { inUserLocation, requirePermission } from '$lib/server/access';
 import { chatStream } from '$lib/server/ai-chat';
-import { chatCompletion, generalPrompt } from '$lib/server/ai';
+import { chatCompletion, createEquipmentTool, generalPrompt } from '$lib/server/ai';
 import { generalLookups, generalTools } from '$lib/server/ai-lookups';
 import { equipment, location } from '$lib/server/db/schema';
 import { addQuestion, saveReply } from '$lib/server/chats';
 import { ChatQuestion } from '$lib/server/forms';
 import { appToday } from '$lib/server/schedule';
+import { loadLocations } from '$lib/server/locations';
 import { currentModel } from '$lib/server/settings';
+import { can } from '$lib/permissions';
 
 // An item can take several steps: find it, read it, search its manual, then answer.
 const MAX_ROUNDS = 5;
@@ -32,6 +34,13 @@ export const POST = async ({ request, locals }) => {
 		.orderBy(asc(location.name), asc(equipment.name))
 		.limit(INDEX_LIMIT + 1);
 
+	const locations = await loadLocations(locals);
+	const canCreate =
+		can(locals.user, 'ai.modify') && can(locals.user, 'equipment.create') && locations.length > 0;
+	const tools = canCreate
+		? [...generalTools, createEquipmentTool(locations.map((l) => l.name))]
+		: generalTools;
+
 	const { id, history } = await addQuestion(locals, null, parsed.data.chatId, parsed.data.content);
 	const stream = chatStream({
 		first: { chat: id },
@@ -45,12 +54,13 @@ export const POST = async ({ request, locals }) => {
 					locals.user!,
 					rows.slice(0, INDEX_LIMIT),
 					rows.length > INDEX_LIMIT,
-					appToday(env)
+					appToday(env),
+					canCreate
 				)
 			},
 			...history
 		],
-		tools: generalTools,
+		tools,
 		maxRounds: MAX_ROUNDS
 	});
 	return new Response(stream, {

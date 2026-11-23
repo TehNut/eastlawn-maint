@@ -4,14 +4,18 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { inUserLocation, requirePermission } from '$lib/server/access';
 import { equipment, maintenanceLog, newId } from '$lib/server/db/schema';
-import { AiEquipmentPatch, AiLog } from '$lib/server/forms';
+import { AiEquipmentPatch, AiLog, AiNewEquipment } from '$lib/server/forms';
+import { loadLocations } from '$lib/server/locations';
 import { appToday, readingProblem, refreshDue, syncLogReading } from '$lib/server/schedule';
 
-const Body = z.object({
-	equipmentId: z.string(),
-	tool: z.enum(['update_equipment', 'add_maintenance_log']),
-	args: z.unknown()
-});
+const Body = z.discriminatedUnion('tool', [
+	z.object({ tool: z.literal('create_equipment'), args: z.unknown() }),
+	z.object({
+		tool: z.enum(['update_equipment', 'add_maintenance_log']),
+		equipmentId: z.string(),
+		args: z.unknown()
+	})
+]);
 
 // Runs a change the user approved in the chat. It re-checks everything: the proposal came from a
 // model by way of the browser, so it gets no more trust than any other request.
@@ -19,6 +23,7 @@ export const POST = async ({ request, locals }) => {
 	requirePermission(locals, 'ai.modify');
 	const parsed = Body.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) error(400, 'Invalid request');
+	if (parsed.data.tool === 'create_equipment') return create(locals, parsed.data.args);
 	const { equipmentId, tool, args } = parsed.data;
 
 	const [item] = await locals.db
@@ -66,3 +71,16 @@ export const POST = async ({ request, locals }) => {
 	}
 	return json({ ok: true });
 };
+
+async function create(locals: App.Locals, args: unknown) {
+	requirePermission(locals, 'equipment.create');
+	const parsed = AiNewEquipment.safeParse(args);
+	if (!parsed.success) error(400, 'Invalid equipment');
+	const { location, ...fields } = parsed.data;
+	// Only the user's own locations, so a restricted user can't be steered into another one.
+	const found = (await loadLocations(locals)).find((l) => l.name === location);
+	if (!found) error(400, 'Choose one of your locations');
+	const id = newId();
+	await locals.db.insert(equipment).values({ id, ...fields, locationId: found.id });
+	return json({ ok: true, id });
+}

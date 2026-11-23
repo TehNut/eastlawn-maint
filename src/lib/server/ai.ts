@@ -1,8 +1,10 @@
 import {
+	categoryValues,
 	formatDate,
 	LOG_TYPES,
 	logTypeLabel,
 	logTypeValues,
+	meterUnitValues,
 	STATUSES,
 	statusLabel,
 	statusValues
@@ -69,6 +71,37 @@ export function aiTools(user: App.Locals['user'], hasSearchableManual: boolean) 
 	}
 	return tools;
 }
+
+// For the general assistant. Like aiTools, it only proposes: the user approves before anything is
+// created. Offered when the user may make AI changes and create equipment.
+export const createEquipmentTool = (locationNames: string[]) => ({
+	type: 'function',
+	function: {
+		name: 'create_equipment',
+		description:
+			'Propose adding a new item of equipment. Only when the user asks to add one. Fill in only what the user told you.',
+		parameters: {
+			type: 'object',
+			properties: {
+				name: { type: 'string', description: 'What people call it, e.g. "Kubota L3901"' },
+				location: { type: 'string', enum: locationNames },
+				category: { type: 'string', enum: categoryValues },
+				manufacturer: { type: 'string' },
+				model: { type: 'string' },
+				serialNumber: { type: 'string' },
+				year: { type: 'integer' },
+				meterUnit: {
+					type: 'string',
+					enum: meterUnitValues,
+					description: 'Only if it has an hour meter or odometer'
+				},
+				notes: { type: 'string' }
+			},
+			required: ['name', 'location', 'category'],
+			additionalProperties: false
+		}
+	}
+});
 
 export function chatCompletion(env: Env, model: string, messages: unknown[], tools: unknown[]) {
 	return fetch(
@@ -158,7 +191,8 @@ export function generalPrompt(
 	user: NonNullable<App.Locals['user']>,
 	equipment: IndexEntry[],
 	truncated: boolean,
-	today: string
+	today: string,
+	canCreate: boolean
 ) {
 	const allowed = PERMISSIONS.filter((p) => can(user, p.value)).map((p) => p.label);
 	return [
@@ -176,7 +210,9 @@ export function generalPrompt(
 		'- Activity tab: recent logs, filterable by location.',
 		'- Account tab: appearance, password, and for admins, managing users and locations.',
 		'',
-		'You can look things up but cannot change anything. To change something, tell the user where to do it in the app.',
+		canCreate
+			? 'You can look things up, and when the user asks to add new equipment you can propose it with create_equipment; they approve it before it is created. Ask for the name, location and category if you do not know them. You cannot change anything else: tell the user where to do it in the app.'
+			: 'You can look things up but cannot change anything. To change something, tell the user where to do it in the app.',
 		'Use find_equipment, get_equipment and search_manual rather than guessing about any item. Do not answer details about an item without looking it up.',
 		'Cite manual pages like (p. 12).',
 		'When you mention a specific item, link it as [Name](/equipment/<id>), using its id from the list below or from a tool, for example [Kubota L3901](/equipment/a1b2c3d4e5f6a7b8). The app shows the link as a card with its photo, status and due state. Link each item once, where it first comes up. Only link ids you were given; never guess one, and never show an id any other way.',

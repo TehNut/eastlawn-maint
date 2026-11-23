@@ -182,6 +182,18 @@ export const AiEquipmentPatch = z.strictObject({
 	serialNumber: text(500),
 	notes: text(5000)
 });
+// A new item the assistant proposed. The location comes by name, resolved against the user's own.
+export const AiNewEquipment = z.strictObject({
+	name: z.string().trim().min(1).max(500),
+	location: z.string().trim().min(1).max(500),
+	category: z.enum(categoryValues),
+	manufacturer: text(500),
+	model: text(500),
+	serialNumber: text(500),
+	year: z.number().int().min(1900).max(2100).optional(),
+	meterUnit: z.enum(meterUnitValues).optional(),
+	notes: text(5000)
+});
 export const AiLog = z.strictObject({
 	type: z.enum(logTypeValues),
 	description: z.string().trim().min(1).max(5000),

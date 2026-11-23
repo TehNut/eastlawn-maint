@@ -49,7 +49,13 @@
 		applyTo?: string;
 	} = $props();
 
-	type Proposal = { tool: string; args: Record<string, unknown>; state: 'open' | 'busy' | 'done' };
+	type Proposal = {
+		tool: string;
+		args: Record<string, unknown>;
+		state: 'open' | 'busy' | 'done';
+		// The item a create_equipment proposal made.
+		created?: string;
+	};
 
 	let chatId = $state<string | null>(null);
 	let messages = $state<ChatMessage[]>([]);
@@ -129,7 +135,12 @@
 		const response = await fetch('/api/ask/apply', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ equipmentId: applyTo, tool: proposal.tool, args: proposal.args })
+			body: JSON.stringify({
+				tool: proposal.tool,
+				args: proposal.args,
+				// New equipment isn't tied to an item; changes apply to this page's.
+				...(proposal.tool === 'create_equipment' ? {} : { equipmentId: applyTo })
+			})
 		});
 		if (!response.ok) {
 			const body = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -137,13 +148,15 @@
 			proposal.state = 'open';
 			return;
 		}
+		proposal.created = ((await response.json()) as { id?: string }).id;
 		proposal.state = 'done';
 		await invalidateAll();
 	}
 
 	const TITLES: Record<string, string> = {
 		update_equipment: 'Update equipment',
-		add_maintenance_log: 'Add maintenance log'
+		add_maintenance_log: 'Add maintenance log',
+		create_equipment: 'Add equipment'
 	};
 
 	// Every page the model read, grouped by manual, for the list under a reply.
@@ -346,7 +359,16 @@
 								{/each}
 							</dl>
 							{#if proposal.state === 'done'}
-								<p role="status" class="text-muted-foreground">Applied.</p>
+								<p role="status" class="text-muted-foreground">
+									{#if proposal.created}
+										Added. <a
+											href="/equipment/{proposal.created}"
+											class="font-medium text-foreground underline">Open {proposal.args.name}</a
+										>
+									{:else}
+										Applied.
+									{/if}
+								</p>
 							{:else}
 								<div class="flex gap-2">
 									<Button
