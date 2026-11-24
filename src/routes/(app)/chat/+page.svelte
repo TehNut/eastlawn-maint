@@ -15,7 +15,7 @@
 	<ChatPanel
 		endpoint="/api/chat"
 		chat={data.chat}
-		intro="Ask about your equipment or how to use the app. It can look things up but can't change anything."
+		intro="Ask about your equipment or how to use the app. It can look things up, and with permission propose changes for you to approve."
 		starters={[
 			// Questions that need manuals or reasoning across logs, which no single page shows.
 			'Help me troubleshoot something that won’t start',

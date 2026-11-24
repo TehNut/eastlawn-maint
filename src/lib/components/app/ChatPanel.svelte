@@ -132,14 +132,16 @@
 	async function apply(proposal: Proposal) {
 		proposal.state = 'busy';
 		error = '';
+		// The general assistant names the item; an item's chat applies to that item.
+		const { equipmentId = applyTo, ...args } = proposal.args;
 		const response = await fetch('/api/ask/apply', {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
 				tool: proposal.tool,
-				args: proposal.args,
-				// New equipment isn't tied to an item; changes apply to this page's.
-				...(proposal.tool === 'create_equipment' ? {} : { equipmentId: applyTo })
+				args,
+				// New equipment isn't tied to an item.
+				...(proposal.tool === 'create_equipment' ? {} : { equipmentId })
 			})
 		});
 		if (!response.ok) {
@@ -353,8 +355,19 @@
 							<dl class="space-y-1">
 								{#each Object.entries(proposal.args) as [field, value] (field)}
 									<div>
-										<dt class="text-xs text-muted-foreground">{field}</dt>
-										<dd class="whitespace-pre-wrap">{String(value)}</dd>
+										<dt class="text-xs text-muted-foreground">
+											{field === 'equipmentId' ? 'item' : field}
+										</dt>
+										<dd class="whitespace-pre-wrap">
+											{#if field === 'equipmentId'}
+												<!-- Show which item, never the raw id. -->
+												<a href="/equipment/{value}" class="underline"
+													>{equipment[String(value)]?.name ?? 'Open item'}</a
+												>
+											{:else}
+												{String(value)}
+											{/if}
+										</dd>
 									</div>
 								{/each}
 							</dl>

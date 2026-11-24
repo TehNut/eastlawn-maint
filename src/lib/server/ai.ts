@@ -25,26 +25,7 @@ export function aiTools(user: App.Locals['user'], hasSearchableManual: boolean) 
 	const tools: Tool[] = hasSearchableManual ? [searchTool] : [];
 	if (!can(user, 'ai.modify')) return tools;
 	if (can(user, 'equipment.update')) {
-		tools.push({
-			type: 'function',
-			function: {
-				name: 'update_equipment',
-				description:
-					'Propose changing fields on this equipment. Only include fields that change. Notes replace the existing notes.',
-				parameters: {
-					type: 'object',
-					properties: {
-						name: { type: 'string' },
-						status: { type: 'string', enum: statusValues },
-						manufacturer: { type: 'string' },
-						model: { type: 'string' },
-						serialNumber: { type: 'string' },
-						notes: { type: 'string' }
-					},
-					additionalProperties: false
-				}
-			}
-		});
+		tools.push(updateEquipmentTool(false));
 	}
 	if (can(user, 'log.create')) {
 		tools.push({
@@ -71,6 +52,31 @@ export function aiTools(user: App.Locals['user'], hasSearchableManual: boolean) 
 	}
 	return tools;
 }
+
+// The general assistant has no current item, so it names the one to change.
+export const updateEquipmentTool = (general: boolean): Tool => ({
+	type: 'function',
+	function: {
+		name: 'update_equipment',
+		description: `Propose changing fields on ${general ? 'an item of' : 'this'} equipment. Only include fields that change. Notes replace the existing notes.`,
+		parameters: {
+			type: 'object',
+			properties: {
+				...(general && {
+					equipmentId: { type: 'string', description: 'The id of the item to change' }
+				}),
+				name: { type: 'string' },
+				status: { type: 'string', enum: statusValues },
+				manufacturer: { type: 'string' },
+				model: { type: 'string' },
+				serialNumber: { type: 'string' },
+				notes: { type: 'string' }
+			},
+			...(general && { required: ['equipmentId'] }),
+			additionalProperties: false
+		}
+	}
+});
 
 // For the general assistant. Like aiTools, it only proposes: the user approves before anything is
 // created. Offered when the user may make AI changes and create equipment.
@@ -192,8 +198,14 @@ export function generalPrompt(
 	equipment: IndexEntry[],
 	truncated: boolean,
 	today: string,
-	canCreate: boolean
+	offer: { create: boolean; update: boolean }
 ) {
+	const changes = [
+		offer.create &&
+			'when the user asks to add new equipment you can propose it with create_equipment (ask for the name, location and category if you do not know them)',
+		offer.update &&
+			'when the user asks to change an item you can propose it with update_equipment, after looking the item up with get_equipment'
+	].filter(Boolean);
 	const allowed = PERMISSIONS.filter((p) => can(user, p.value)).map((p) => p.label);
 	return [
 		'You are the assistant inside Equipment Log, which maintenance technicians use on their phones to track equipment across locations.',
@@ -210,8 +222,8 @@ export function generalPrompt(
 		'- Activity tab: recent logs, filterable by location.',
 		'- Account tab: appearance, password, and for admins, managing users and locations.',
 		'',
-		canCreate
-			? 'You can look things up, and when the user asks to add new equipment you can propose it with create_equipment; they approve it before it is created. Ask for the name, location and category if you do not know them. You cannot change anything else: tell the user where to do it in the app.'
+		changes.length
+			? `You can look things up, and ${changes.join('; and ')}. The user approves each proposal before it happens. You cannot change anything else: tell the user where to do it in the app.`
 			: 'You can look things up but cannot change anything. To change something, tell the user where to do it in the app.',
 		'Use find_equipment, get_equipment and search_manual rather than guessing about any item. Do not answer details about an item without looking it up.',
 		'Cite manual pages like (p. 12).',
