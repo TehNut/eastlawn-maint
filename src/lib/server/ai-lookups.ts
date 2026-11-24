@@ -152,7 +152,7 @@ export function generalLookups(locals: App.Locals): Record<string, Lookup> {
 				if (!found) return { text: NOT_FOUND };
 				if (!found.manual?.chunkCount) return { text: 'This item has no searchable manual.' };
 				const manualId = found.manual.id;
-				const hits = await searchManual(locals.db, manualId, parsed.data.query);
+				const hits = await searchManual(manualId, parsed.data.query);
 				return {
 					text: hits.length
 						? hits.map((hit) => `[page ${hit.page}] ${hit.text}`).join('\n\n')

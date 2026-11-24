@@ -8,7 +8,8 @@ database, served from one Docker container. AI runs on Cloudflare Workers AI thr
 
 ```sh
 bun install
-cp .env.example .env   # set BETTER_AUTH_SECRET and SETUP_TOKEN: openssl rand -base64 32
+cp .env.example .env   # set BETTER_AUTH_SECRET, SETUP_TOKEN, MEILI_MASTER_KEY: openssl rand -base64 32
+docker compose up -d meilisearch
 bun run dev
 ```
 
@@ -119,8 +120,9 @@ its notes and logs are model input. Each tool applies the user's location itself
 ## Operator manuals
 
 The browser extracts the PDF's text with pdf.js at upload, so the server does no parsing. The PDF
-goes to `data/files/manuals/` and the text, split into small passages, to Turso's full-text index
-(which has no stemmer, so searches also try each word's plain plural or singular). Identical files are stored
+goes to `data/files/manuals/` and the text, split into small passages, to the database and to
+Meilisearch (the `meilisearch` service in `compose.yaml`). The database copy is the source of truth:
+if the search index is empty at startup, the app rebuilds it from there. Identical files are stored
 once, and a manual is deleted when the last item using it lets go.
 
 The AI gets a `search_manual` tool rather than the manual: it pulls the top five passages when a
@@ -135,6 +137,8 @@ Set in `.env` (see `.env.example`):
   and is also used if the chosen model is later removed from this list.
 - `AI_GATEWAY_ID`: the AI Gateway to route through.
 - `APP_TIMEZONE`: the IANA timezone that decides "today" for due dates.
+- `MEILI_MASTER_KEY`: Meilisearch's key, shared by the app and the container. `MEILI_URL` defaults
+  to `http://localhost:7700`; compose points it at the container.
 - `DATA_DIR`: where the database and files live (`data`, or `/data` in Docker).
 - `S3_BUCKET` (optional): store photos and manuals in an S3-compatible bucket instead of
   `DATA_DIR/files`. Needs `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`; `S3_ENDPOINT` (default

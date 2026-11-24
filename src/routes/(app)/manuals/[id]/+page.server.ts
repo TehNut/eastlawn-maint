@@ -45,7 +45,7 @@ export const load = async ({ locals, params, url }) => {
 		q,
 		page: Number(url.searchParams.get('page')) || 1,
 		back: ID.test(from) ? `/equipment/${from}` : '/',
-		results: q ? await searchManual(locals.db, item.id, q) : [],
+		results: q ? await searchManual(item.id, q) : [],
 		// Saving a page needs an item to keep it on.
 		owner: owner && can(locals.user, 'equipment.update') ? owner : null,
 		jobs: owner

@@ -1,13 +1,13 @@
 import { count, eq, sql } from 'drizzle-orm';
-import { chunkPages, ftsQuery, type PageText } from '$lib/manual-text';
+import { chunkPages, type PageText } from '$lib/manual-text';
 import type { Db } from './db';
 import { equipment, manual, newId } from './db/schema';
+import { deletePassages, indexPassages, searchPassages } from './search';
 import type { Bucket } from './storage';
 
 const MAX_BYTES = 50 * 1024 * 1024;
 // Keeps each bound JSON value to a modest size.
 const MAX_BATCH_BYTES = 1_500_000;
-const SEARCH_LIMIT = 5;
 
 export const manualKey = (id: string) => `manuals/${id}`;
 
@@ -51,6 +51,7 @@ export async function saveManual(
 			chunkCount: chunks.length
 		});
 		await insertChunks(db, id, chunks);
+		await indexPassages(id, chunks);
 	} catch (e) {
 		await bucket.delete(manualKey(id));
 		await db.delete(manual).where(eq(manual.id, id));
@@ -82,17 +83,7 @@ async function insertChunks(db: Db, id: string, chunks: ReturnType<typeof chunkP
 	await flush();
 }
 
-export async function searchManual(db: Db, manualId: string, query: string) {
-	const match = ftsQuery(manualId, query);
-	if (!match) return [];
-	const rows = await db.values<[number, string]>(sql`
-		SELECT page, text FROM manual_chunk
-		WHERE fts_match(manual_id, text, ${match})
-		ORDER BY fts_score(manual_id, text, ${match}) DESC
-		LIMIT ${SEARCH_LIMIT}
-	`);
-	return rows.map(([page, text]) => ({ page, text }));
-}
+export const searchManual = searchPassages;
 
 // Deletes a manual once nothing uses it. Call after unlinking or deleting equipment.
 export async function pruneManual(db: Db, bucket: Bucket, id: string | null) {
@@ -104,4 +95,5 @@ export async function pruneManual(db: Db, bucket: Bucket, id: string | null) {
 	if (total > 0) return;
 	await db.delete(manual).where(eq(manual.id, id));
 	await bucket.delete(manualKey(id));
+	await deletePassages(id);
 }

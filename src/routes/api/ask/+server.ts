@@ -44,7 +44,7 @@ export const POST = async ({ request, locals }) => {
 					search_manual: {
 						label: 'Searching the manual…',
 						run: async (args) => {
-							const hits = await searchManual(locals.db, manual.id, String(args.query ?? ''));
+							const hits = await searchManual(manual.id, String(args.query ?? ''));
 							return {
 								text: hits.length
 									? hits.map((hit) => `[page ${hit.page}] ${hit.text}`).join('\n\n')

@@ -106,8 +106,7 @@ export const manual = sqliteTable('manual', {
 	createdAt: timestamp('created_at')
 });
 
-// Indexed for full-text search by the manual_chunk_fts table and its triggers, which live in a
-// hand-written migration because Drizzle can't express FTS5 virtual tables.
+// Searched through Meilisearch (server/search.ts); these rows are what its index is rebuilt from.
 export const manualChunk = sqliteTable(
 	'manual_chunk',
 	{

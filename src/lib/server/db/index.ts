@@ -14,7 +14,7 @@ type Query = { sql: string; params: unknown[]; method: 'run' | 'all' | 'values' 
 // inside its transaction on this shared connection.
 function connect(path: string) {
 	mkdirSync(DATA_DIR, { recursive: true });
-	// index_method enables the full-text index on manual_chunk (drizzle/0003).
+	// index_method lets drizzle/0003 create the old full-text index on a fresh database (0012 drops it).
 	const client = new Database(path, { experimental: ['index_method'] });
 	// Off by default in SQLite (D1 had it on), and the schema relies on cascades and restricts.
 	client.exec('PRAGMA foreign_keys = ON');

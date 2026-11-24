@@ -6,6 +6,7 @@ import { requireRouteInLocation } from '$lib/server/access';
 import { env } from '$env/dynamic/private';
 import { openDb, type Db } from '$lib/server/db';
 import { signInAllowed } from '$lib/server/rate-limit';
+import { syncSearchIndex } from '$lib/server/search';
 import type { Permission } from '$lib/permissions';
 
 const isPublic = (path: string) =>
@@ -24,7 +25,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	) {
 		error(429, 'Too many sign-in attempts. Wait a minute and try again.');
 	}
-	const conn = await (db ??= openDb());
+	const conn = await (db ??= openDb().then((conn) => {
+		// In the background: a search engine that's still starting shouldn't block the app.
+		syncSearchIndex(conn).catch((e) => console.error('Search index sync failed:', e));
+		return conn;
+	}));
 	const auth = createAuth(conn, env, event.url.origin);
 
 	const session = await auth.api.getSession({ headers: event.request.headers });
